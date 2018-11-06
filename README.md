@@ -1,8 +1,8 @@
 # Metal-Archives Query (maq)
 
-A command line tool to query [The Metal-Archives] (http://www.metal-archives.com) and dump reviews and band information in CSV format.
+A command line tool to query [The Metal-Archives](http://www.metal-archives.com) and dump reviews and band information in CSV format.
 
-[The Metal-Archives] (http://www.metal-archives.com) does not have an official developer API to access its database directly. However, there is an internal JSON API that the site's Javascript code uses to display results which can be leveraged to achieve essentially the samething.
+[The Metal-Archives](http://www.metal-archives.com) does not have an official developer API to access its database directly. However, there is an internal JSON API that the site's Javascript code uses to display results which can be leveraged to achieve essentially the samething.
 
 ## Getting Started
 
@@ -125,7 +125,7 @@ Please note that records are written out in batches. Currently the batchsize is 
 
 ## Troubleshooting
 
-maq makes heavy use of the [click] (http://click.palletsprojects.com/en/7.x/) which requires that your shell's locale be set to something sensible. If you execute maq and get the following error:
+maq makes heavy use of the [click](http://click.palletsprojects.com/en/7.x/) which requires that your shell's locale be set to something sensible. If you execute maq and get the following error:
 
 ```
 RuntimeError: Click will abort further execution because Python 3 was configured to use ASCII as encoding for the environment.
