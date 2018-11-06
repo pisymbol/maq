@@ -277,6 +277,9 @@ QUOTING_RULES = {
 # Fetch URL throttle tuneable (default is half a second)
 THROTTLE = 0.5
 
+# Default number of retries for all fetch requests
+RETRIES = 3
+
 # This is a bit overkill but we will construct a simple OOM.
 # MA pages are backed by a URL. These pages in-turn represent
 # instances of bands which record albums that users review.
@@ -398,7 +401,7 @@ class MAReview(MAPage):
     def to_list(self):
         """ Return fields as list """
 
-        return self.band.to_list() + [self.album, self.author, self.review, self.rating, self.date]
+        return self.band.to_list() + [self.id, self.album, self.author, self.review, self.rating, self.date]
 
     def to_dict(self):
         """ Return fields as dict """
@@ -450,7 +453,7 @@ def fetch_bands(by, criteria, start = MA_START):
 
 
     # Try three times before giving up
-    for _ in range(3):
+    for _ in range(RETRIES):
         try:
             r = fetch_url(url, payload=payload)
             js = r.json()
@@ -475,7 +478,7 @@ def fetch_reviews(by, criteria, start = MA_START):
     payload['iDisplayStart'] = start
     
     # Try three times before giving up
-    for _ in range(3):
+    for _ in range(RETRIES):
         try:
             r = fetch_url(url, payload=payload)
             js = r.json()
@@ -505,6 +508,7 @@ class MAQ(object):
 
         # Walk through each review by letter
         if self.header:
+            logger.info("Header field names: %s" % ' '.join(fields))
             if self.csvfile:
                 self.csvwriter = csv.DictWriter(self.csvfile, delimiter = self.csvdelimiter, \
                         fieldnames = fields, quoting = self.quoting)
@@ -630,11 +634,15 @@ class MAQ(object):
 
                     # Write out our batch group now
                     itrs -= trs
-                    fields = MAReview.to_fields() if qtype == 'review' else MABand.to_fields()
+                    fields = MAReview.to_fields() if qtype == 'reviews' else MABand.to_fields()
                     self.write_header(fields = fields)
                     for entry in entries:
                         if self.csvfile:
-                            self.csvwriter.writerow(entry.to_dict())
+                            try:
+                                self.csvwriter.writerow(entry.to_dict())
+                            except Exception:
+                                logger.error("Failed to write entry: %s" % (entry.to_list()))
+                                raise
                         else:
                             click.echo(self.csvdelimiter.join(entry.to_list()))
                     logger.info("Processed %d records..." % len(entries))
@@ -656,12 +664,14 @@ def setup_logging(verbose = False):
 @click.option('--delimiter', '-d', type = click.STRING, default = ',', help = 'CSV delimeter')
 @click.option('--header/--noheader', default = True, help = 'Write header')
 @click.option('--quoting', '-q', type = click.Choice(QUOTING_RULES.keys()), default = 'all', help= 'CSV quoting behavior')
+@click.option('--retries', '-r', type = click.INT, default = RETRIES, help = 'Number of request retries')
 @click.option('--throttle', '-t', type = click.FLOAT, default = THROTTLE, help = 'Throttle requests (seconds)')
 @click.option('--verbose', '-v', is_flag = True, default = False, help = 'Verbose mode')
 @click.pass_context
-def cli(ctx, csvfile, delimiter, header, quoting, throttle, verbose):
+def cli(ctx, csvfile, delimiter, header, quoting, retries, throttle, verbose):
     """ Metal-Archives Query """
     global THROTTLE
+    global RETRIES
 
     # Instastiate our logger for the our whole run.
     setup_logging(verbose)
@@ -670,6 +680,7 @@ def cli(ctx, csvfile, delimiter, header, quoting, throttle, verbose):
     THROTTLE = throttle
     if THROTTLE > 0:
         logger.info("All requests will be throttled by %.2f second(s)..." % THROTTLE)
+    RETRIES = retries
 
     # Build our command line application that will do
     # all the grunt work.
