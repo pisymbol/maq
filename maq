@@ -6,7 +6,7 @@
 #
 # The *M*etal-*A*rchives *Q*uery utility
 #
-# Author: Alexander Sack (pisymbol@gmail.com)
+# Author: Alexander Sack
 #
 # Description: 
 #
@@ -274,8 +274,8 @@ QUOTING_RULES = {
         'none': csv.QUOTE_NONE,
 }
 
-# Fetch URL throttle tuneable
-THROTTLE = 0
+# Fetch URL throttle tuneable (default is half a second)
+THROTTLE = 0.5
 
 # This is a bit overkill but we will construct a simple OOM.
 # MA pages are backed by a URL. These pages in-turn represent
@@ -315,6 +315,13 @@ class MABand(MAPage):
 
         r = fetch_url(self.url)
         r_soup = BeautifulSoup(r.content, 'lxml')
+
+        # Try to find the HTML UTF-8 based band name
+        # which should override the URL encoded one.
+        h1 = r_soup.find('h1', {'class': 'band_name'})
+        if not h1:
+            self.name = h1.find_next().text.strip()
+
         for dt in r_soup.find_all('dt'):
             if dt.text == 'Country of origin:':
                 self.origin = dt.find_next().text.strip()
@@ -515,150 +522,124 @@ class MAQ(object):
                 widgets = [progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
         self.bar.start()
 
-    def bands(self, by, letters = MA_BAND_LETTERS, countries = MA_BAND_COUNTRY_CODES, \
+    def query(self, qtype, by, \
+            letters = MA_REVIEW_LETTERS, ratings = MA_REVIEW_RATINGS, \
+            dates = MA_REVIEW_DATES, countries = MA_BAND_COUNTRY_CODES, \
             genres = MA_BAND_GENRES, records = -1):
-        """ Query MA for band info """
+        """ Query MA """
 
-        logger.info("query bands by %s" % by)
-
-        if by == 'alpha':
-            criterias = letters
-        elif by == 'country':
-            criterias = countries
-        else:
-            criterias = genres
-
-        # First find the total number of records we plan to fetch
-        # We need to do this in two passes unfortunately.
-        trs = 0
-        for c in criterias:
-            js = fetch_bands(by, criteria = c)
-            itrs = int(js['iTotalRecords'])
-            logger.info("Found total of %d records for criteria %s..." % (itrs, c))
-            trs += itrs
-            if records != -1 and trs > records:
-                break
-        logger.info("Found total of %d records..." % trs)
-
-        nrecords = 0
-        for c in criterias:
-            if records != 0 and nrecords != trs:
-                logger.info("Processing reviews with the criteria %s..." % c)
-                js = fetch_bands(by, criteria = c)
-                trs = int(js['iTotalRecords']) if records == -1 else records
-                self.progress_bar(trs)
-                batches = trs//MA_BATCHSIZE
-                batches = batches + 1 if trs % MA_BATCHSIZE != 0 else batches
-                logger.info("Retreiving %d total records (batches = %d)..." % (trs, batches))
-                for b in range(batches):
-                    mabs = []
-                    if trs > 0:
-                        logger.info("Fetching batch %d (%d records)..." % (b+1, MA_BATCHSIZE))
-                        js = fetch_bands(by, criteria = c, start = b * MA_BATCHSIZE)
-                        # Each band entry ('aa') consists of a:
-                        #   - band url
-                        #   - country of origin
-                        #   - genre
-                        #   - status
-                        aaData = js['aaData']
-                        for aa in aaData:
-                            if len(aa) == 4:
-                                ahref = BeautifulSoup(aa[0], "lxml")
-                                mab = MABand(ahref.find('a').get('href'))
-                                mab.parse()
-                                mabs.append(mab)
-                            nrecords += 1
-                            self.bar.update(nrecords)
-                            if nrecords == trs: break
-
-                    # Write out our batch or up to 'records'
-                    self.write_header(fields = MABand.to_fields())
-                    for mab in mabs:
-                        if self.csvfile:
-                            self.csvwriter.writerow(mab.to_dict())
-                        else:
-                            click.echo(self.csvdelimiter.join(mab.to_list()))
-                    logger.info("Processed %d records..." % len(mabs))
-                self.bar.finish()
-        return 0
-
-    def reviews(self, by, letters = MA_REVIEW_LETTERS, ratings = MA_REVIEW_RATINGS, \
-            dates = MA_REVIEW_DATES, records = -1):
-        """ Query MA for review info """
-
-        logger.info("query reviews by %s"% by)
+        logger.info("Query %s by %s"% (qtype, by))
 
         if by == 'alpha':
-            criterias = letters
+            criteria = letters
         elif by == 'rating':
-            criterias = ratings
+            criteria = ratings
+        elif by == 'country':
+            criteria = countries
+        elif by == 'genre':
+            criteria = genres
         else:
-            criterias = dates
+            criteria = dates
 
         # First find the total number of records we plan to fetch
         # We need to do this in two passes unfortunately.
         trs = 0
-        for c in criterias:
-            js = fetch_reviews(by, criteria = c)
-            itrs = int(js['iTotalRecords'])
-            logger.info("Found total of %d records for criteria %s..." % (itrs, c))
-            trs += itrs
-            if records != -1 and trs > records:
-                break
-        logger.info("Found total of %d records..." % trs)
-
-        nrecords = 0
-        for c in criterias:
-            if records != 0 and nrecords != trs:
-                logger.info("Processing reviews with the criteria %s..." % c)
+        for c in criteria:
+            if qtype == 'reviews':
                 js = fetch_reviews(by, criteria = c)
-                trs = int(js['iTotalRecords']) if records == -1 else records
-                self.progress_bar(trs)
+            else:
+                js = fetch_bands(by, criteria = c)
+            itrs = int(js['iTotalRecords'])
+            logger.info("Found total of %5d records for %s criteria %s..." % (itrs, by, c))
+            trs += itrs
+
+        # If asked to fetch only N number of records, honor it.
+        if records != -1: 
+            itrs = min(records, itrs)
+        logger.info("Found a total of %5d records for all %s criteria to retrieve..." % (itrs, by))
+
+        for c in criteria:
+            if itrs > 0:
+                logger.info("Processing reviews with the %s criteria %s..." % (by, c))
+                js = fetch_reviews(by, criteria = c)
+                trs = min(int(js['iTotalRecords']), itrs)
+                if self.verbose:
+                    self.progress_bar(trs)
                 batches = trs//MA_BATCHSIZE
                 batches = batches + 1 if trs % MA_BATCHSIZE != 0 else batches
-                logger.info("Retreiving %d total records (batches = %d)..." % (trs, batches))
+                logger.info("Retrieving %d total records (batches = %d, batchsize = %d)..." % \
+                        (trs, batches, MA_BATCHSIZE))
+                nrecords = 0
                 for b in range(batches):
-                    mars = []
+                    entries = []
                     if trs > 0:
-                        logger.info("Fetching batch %d (%d records)..." % (b+1, MA_BATCHSIZE))
-                        js = fetch_reviews(by, criteria = c, start = b * MA_BATCHSIZE)
-                        # Each review entry ('aa') consists of a:
-                        #   - band name
-                        #   - review url
-                        #   - band url
-                        #   - album url
-                        #   - rating percentage
-                        #   - author url
-                        #   - date of review
-                        aaData = js['aaData']
-                        for aa in aaData:
-                            if len(aa) == 7:
-                                ahref = BeautifulSoup(aa[1], "lxml")
-                                mar = MAReview(ahref.find('a').get('href'))
-                                mar.parse()
-                                ahref = BeautifulSoup(aa[2], "lxml")
-                                mar.band = MABand(ahref.find('a').get('href'))
-                                mar.band.parse()
-                                ahref = BeautifulSoup(aa[3], "lxml")
-                                mar.album = ahref.text
-                                mar.rating = aa[4]
-                                ahref = BeautifulSoup(aa[5], "lxml")
-                                mar.author = ahref.text
-                                mar.date = aa[6]
-                                mars.append(mar)
-                            nrecords += 1
-                            self.bar.update(nrecords)
-                            if nrecords == trs: break
-
-                    # Write out our batch or up to 'records'
-                    self.write_header(fields = MAReview.to_fields())
-                    for mar in mars:
-                        if self.csvfile:
-                            self.csvwriter.writerow(mar.to_dict())
+                        logger.info("Fetching batch %d..." % b)
+                        if qtype == 'reviews':
+                            js = fetch_reviews(by, criteria = c, start = b * MA_BATCHSIZE)
                         else:
-                            click.echo(self.csvdelimiter.join(mar.to_list()))
-                    logger.info("Processed %d records..." % len(mars))
-                self.bar.finish()
+                            js = fetch_bands(by, criteria = c, start = b * MA_BATCHSIZE)
+                        if js:
+                            aaData = js['aaData']
+                            logger.info("%d records in this batch..." % len(aaData))
+                            for aa in aaData:
+                                if qtype == 'reviews':
+                                    # Each review entry ('aa') consists of a:
+                                    #   - band name
+                                    #   - review url
+                                    #   - band url
+                                    #   - album url
+                                    #   - rating percentage
+                                    #   - author url
+                                    #   - date of review
+                                    if len(aa) == 7:
+                                        ahref = BeautifulSoup(aa[1], "lxml")
+                                        mar = MAReview(ahref.find('a').get('href'))
+                                        mar.parse()
+                                        ahref = BeautifulSoup(aa[2], "lxml")
+                                        mar.band = MABand(ahref.find('a').get('href'))
+                                        mar.band.parse()
+                                        ahref = BeautifulSoup(aa[3], "lxml")
+                                        mar.album = ahref.text
+                                        mar.rating = aa[4]
+                                        ahref = BeautifulSoup(aa[5], "lxml")
+                                        mar.author = ahref.text
+                                        mar.date = aa[6]
+                                        entries.append(mar)
+                                    else:
+                                        logger.warn("Malformed review entry: %s..." % aa)
+                                else:
+                                    # Each band entry ('aa') consists of a:
+                                    #   - band url
+                                    #   - country of origin
+                                    #   - genre
+                                    #   - status
+                                    if len(aa) == 4:
+                                        ahref = BeautifulSoup(aa[0], "lxml")
+                                        mab = MABand(ahref.find('a').get('href'))
+                                        mab.parse()
+                                        entries.append(mab)
+                                    else:
+                                        logger.warn("Malformed band entry: %s..." % aa)
+                                nrecords += 1
+                                if self.verbose:
+                                    self.bar.update(nrecords)
+                                if nrecords == trs:
+                                    break
+                        else:
+                            logger.warn("Failed to get json for batch %d..." % b)
+
+                    # Write out our batch group now
+                    itrs -= trs
+                    fields = MAReview.to_fields() if qtype == 'review' else MABand.to_fields()
+                    self.write_header(fields = fields)
+                    for entry in entries:
+                        if self.csvfile:
+                            self.csvwriter.writerow(entry.to_dict())
+                        else:
+                            click.echo(self.csvdelimiter.join(entry.to_list()))
+                    logger.info("Processed %d records..." % len(entries))
+                if self.verbose:
+                    self.bar.finish()
         return 0
 
 def setup_logging(verbose = False):
@@ -675,7 +656,7 @@ def setup_logging(verbose = False):
 @click.option('--delimiter', '-d', type = click.STRING, default = ',', help = 'CSV delimeter')
 @click.option('--header/--noheader', default = True, help = 'Write header')
 @click.option('--quoting', '-q', type = click.Choice(QUOTING_RULES.keys()), default = 'all', help= 'CSV quoting behavior')
-@click.option('--throttle', '-t', type = click.INT, default = 0, help = 'Throttle requests (seconds)')
+@click.option('--throttle', '-t', type = click.FLOAT, default = THROTTLE, help = 'Throttle requests (seconds)')
 @click.option('--verbose', '-v', is_flag = True, default = False, help = 'Verbose mode')
 @click.pass_context
 def cli(ctx, csvfile, delimiter, header, quoting, throttle, verbose):
@@ -688,7 +669,7 @@ def cli(ctx, csvfile, delimiter, header, quoting, throttle, verbose):
     # Set any globals
     THROTTLE = throttle
     if THROTTLE > 0:
-        logger.info("All requests will be throttled by %d seconds..." % THROTTLE)
+        logger.info("All requests will be throttled by %.2f second(s)..." % THROTTLE)
 
     # Build our command line application that will do
     # all the grunt work.
@@ -713,7 +694,7 @@ def reviews(maq, by, date, letter, number, rating):
     else:
         date = MA_REVIEW_DATES if not date else [date]
 
-    return maq.reviews(by, letters = letter, ratings = rating, dates = date, records = number)
+    return maq.query('reviews', by, letters = letter, ratings = rating, dates = date, records = number)
 
 @cli.command()
 @click.option('--by', '-b', type = click.Choice(['alpha', 'country', 'genre']), default = 'alpha', help = 'Query by')
@@ -739,7 +720,7 @@ def bands(maq, by, country, genre, letter, listcountries, number):
     else:
         genre = MA_BAND_GENRES if not genre else [genre]
 
-    return maq.bands(by, letters = letter, countries = country, genres = genre, records = number)
+    return maq.query('bands', by, letters = letter, countries = country, genres = genre, records = number)
 
 # Main main MAIN
 if __name__ == '__main__':
