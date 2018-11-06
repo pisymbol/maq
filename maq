@@ -380,7 +380,8 @@ class MAReview(MAPage):
         super().__init__(url)
 
         slashes = url.split('/')
-        self.id = slashes[-1]
+        self.uid = urllib.parse.unquote(slashes[-1])
+        self.aid = urllib.parse.unquote(slashes[-3])
         self.author = ""
         self.band = ""
         self.album = ""
@@ -401,13 +402,14 @@ class MAReview(MAPage):
     def to_list(self):
         """ Return fields as list """
 
-        return self.band.to_list() + [self.id, self.album, self.author, self.review, self.rating, self.date]
+        return self.band.to_list() + [self.uid, self.aid, self.album, self.author, self.review, self.rating, self.date]
 
     def to_dict(self):
         """ Return fields as dict """
 
         d = {
-                'rid': self.id,
+                'uid': self.uid,
+                'aid': self.aid,
                 'album': self.album,
                 'author': self.author,
                 'review': self.review,
@@ -422,7 +424,7 @@ class MAReview(MAPage):
     def to_fields():
         """ Return field names as list """
 
-        return MABand.to_fields() + ['rid', 'album', 'author', 'review', 'rating', 'date']
+        return MABand.to_fields() + ['uid', 'aid', 'album', 'author', 'review', 'rating', 'date']
 
 def fetch_url(url, headers = MA_HEADERS, payload = MA_PAYLOAD):
     """ Connect to the MA and fetch the url """
@@ -553,9 +555,12 @@ class MAQ(object):
                 js = fetch_reviews(by, criteria = c)
             else:
                 js = fetch_bands(by, criteria = c)
-            itrs = int(js['iTotalRecords'])
-            logger.info("Found total of %5d records for %s criteria %s..." % (itrs, by, c))
-            trs += itrs
+            if js:
+                itrs = int(js['iTotalRecords'])
+                logger.info("Found total of %5d records for %s criteria %s..." % (itrs, by, c))
+                trs += itrs
+            else:
+                logger.error("Failed to fetch %s for criteria %s..." % (qtype, c))
 
         # If asked to fetch only N number of records, honor it.
         if records != -1: 
@@ -584,7 +589,7 @@ class MAQ(object):
                             js = fetch_bands(by, criteria = c, start = b * MA_BATCHSIZE)
                         if js:
                             aaData = js['aaData']
-                            logger.info("%d records in this batch..." % len(aaData))
+                            logger.info("Batch %d has %d records..." % (b, len(aaData)))
                             for aa in aaData:
                                 if qtype == 'reviews':
                                     # Each review entry ('aa') consists of a:
