@@ -424,7 +424,7 @@ class MAReview(MAPage):
     def to_fields():
         """ Return field names as list """
 
-        return MABand.to_fields() + ['uid', 'aid', 'album', 'author', 'review', 'rating', 'date']
+        return ['uid', 'aid', 'album', 'author', 'review', 'rating', 'date']
 
 def fetch_url(url, headers = MA_HEADERS, payload = MA_PAYLOAD):
     """ Connect to the MA and fetch the url """
@@ -582,7 +582,7 @@ class MAQ(object):
                 for b in range(batches):
                     entries = []
                     if trs > 0:
-                        logger.info("Fetching batch %d..." % b)
+                        logger.info("Fetching batch %d of %d..." % (b, batches))
                         if qtype == 'reviews':
                             js = fetch_reviews(by, criteria = c, start = b * MA_BATCHSIZE)
                         else:
@@ -639,7 +639,9 @@ class MAQ(object):
 
                     # Write out our batch group now
                     itrs -= trs
-                    fields = MAReview.to_fields() if qtype == 'reviews' else MABand.to_fields()
+                    fields = MABand.to_fields()
+                    if qtype == 'reviews':
+                        fields += MAReview.to_fields()
                     self.write_header(fields = fields)
                     for entry in entries:
                         if self.csvfile:
