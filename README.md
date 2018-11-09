@@ -121,9 +121,11 @@ To dump all reviews into a CSV file:
 
 ```
 maq --csvfile reviews.csv reviews
+```
 
-To dump all bands into a CSV file and their logos:
+To dump all bands into a CSV file and their corresponding logos (one image per band id):
 
+```
 maq --csvfile bands.csv bands --logos
 ```
 
