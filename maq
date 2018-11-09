@@ -27,8 +27,10 @@ import csv
 import datetime
 import logging
 import json
+import os
 import progressbar
 import requests
+import shutil
 import string
 import sys
 import time
@@ -75,13 +77,12 @@ MA_HEADERS = {
 # Default payload for MA's internal JSON interface
 # Batch size is statically set to 500. 
 MA_START = 0
-MA_BATCHSIZE = 200
 MA_PAYLOAD = {
         'sEcho': 1,
         'iColumns': 7,
-        'iDisplayStart': MA_START,
-        'iDisplayLength': MA_BATCHSIZE 
 }
+MA_REVIEW_BATCHSIZE = 200
+MA_BAND_BATCHSIZE = 500
 
 # Bands start with ASCII upper case letters or 'NBR'
 MA_REVIEW_LETTERS = list(string.ascii_uppercase)
@@ -288,11 +289,13 @@ class MAPage(object):
         self.url = url
 
     def __str__(self):
+
         return self.url
 
     @abstractmethod
     def parse(self):
         """ Main method to parse a page into its constituent parts """
+
         raise NotImplemented
 
 class MABand(MAPage):
@@ -312,38 +315,68 @@ class MABand(MAPage):
         self.genre = ""
         self.themes = ""
         self.label = ""
+        self.logo_url = ""
 
     def parse(self):
         """ Parse a MA band page """
 
         r = fetch_url(self.url)
-        r_soup = BeautifulSoup(r.content, 'lxml')
+        if r.status_code == 200:
+            r_soup = BeautifulSoup(r.content, 'lxml')
 
-        # Try to find the HTML UTF-8 based band name
-        # which should override the URL encoded one.
-        h1 = r_soup.find('h1', {'class': 'band_name'})
-        if not h1:
-            self.name = h1.find_next().text.strip()
+            # Try to find the HTML UTF-8 based band name
+            # which should override the URL encoded one.
+            h1 = r_soup.find('h1', {'class': 'band_name'})
+            if not h1:
+                self.name = h1.find_next().text.strip()
+            bni = r_soup.find('div', {'class': 'band_name_img'})
+            if bni:
+                self.logo_url = bni.find_next().get('href')
 
-        for dt in r_soup.find_all('dt'):
-            if dt.text == 'Country of origin:':
-                self.origin = dt.find_next().text.strip()
-            elif dt.text == 'Location:':
-                self.location = dt.find_next().text.strip()
-            elif dt.text == 'Status:':
-                self.status = dt.find_next().text.strip()
-            elif dt.text == 'Formed in:':
-                self.formedin = dt.find_next().text.strip() 
-            elif dt.text == 'Genre:':
-                # Convert multiple entries separated by '|'
-                genres = dt.find_next().text.strip().replace(',', '|')
-                self.genre = ''.join(genres)
-            elif dt.text == 'Lyrical themes:':
-                # Convert multiple entries separated by '|'
-                themes = dt.find_next().text.strip().replace(',', '|')
-                self.themes = ''.join(themes)
-            elif dt.text == 'Current label:':
-                self.label = dt.find_next().text.strip()
+            for dt in r_soup.find_all('dt'):
+                if dt.text == 'Country of origin:':
+                    self.origin = dt.find_next().text.strip()
+                elif dt.text == 'Location:':
+                    self.location = dt.find_next().text.strip()
+                elif dt.text == 'Status:':
+                    self.status = dt.find_next().text.strip()
+                elif dt.text == 'Formed in:':
+                    self.formedin = dt.find_next().text.strip() 
+                elif dt.text == 'Genre:':
+                    # Convert multiple entries separated by '|'
+                    genres = dt.find_next().text.strip().replace(',', '|')
+                    self.genre = ''.join(genres)
+                elif dt.text == 'Lyrical themes:':
+                    # Convert multiple entries separated by '|'
+                    themes = dt.find_next().text.strip().replace(',', '|')
+                    self.themes = ''.join(themes)
+                elif dt.text == 'Current label:':
+                    self.label = dt.find_next().text.strip()
+
+    def save_logo(self, logo_dir = None):
+        """ Save logo image to file """
+
+        if self.logo_url:
+            r = requests.get(self.logo_url, stream = True)
+            if r.status_code == 200:
+                # Calculate logo name from URL
+                slashes = self.logo_url.split('/')
+                img_name = slashes[-1]
+
+                # Check if size parameter is embedded in URL
+                q = img_name.find('?')
+                if q > 0:
+                    img_name = img_name[:q]
+                
+                # Get suffix and create logo filename from band id
+                dots = img_name.split('.')
+                logo = ""
+                if logo_dir:
+                    logo = logo_dir + os.path.sep
+                logo += self.id + '.' + dots[-1].lower()
+                with open(logo, 'wb') as f:
+                    r.raw.decode_content = True
+                    shutil.copyfileobj(r.raw, f)
 
     def to_list(self):
         """ Return fields as list """
@@ -393,11 +426,12 @@ class MAReview(MAPage):
         """ Parse a MA review page """
 
         r = fetch_url(self.url)
-        r_soup = BeautifulSoup(r.content, 'lxml')
-        review = r_soup.find('div', {'class': 'reviewContent'})
-        logger = logging.getLogger('maq')
-        if review:
-            self.review = review.text
+        if r.status_code == 200:
+            r_soup = BeautifulSoup(r.content, 'lxml')
+            review = r_soup.find('div', {'class': 'reviewContent'})
+            logger = logging.getLogger('maq')
+            if review:
+                self.review = review.text
 
     def to_list(self):
         """ Return fields as list """
@@ -452,18 +486,18 @@ def fetch_bands(by, criteria, start = MA_START):
     # Set how many records to return
     payload = MA_PAYLOAD
     payload['iDisplayStart'] = start
-
+    payload['iDisplayLength'] = 500
 
     # Try three times before giving up
     for _ in range(RETRIES):
         try:
             r = fetch_url(url, payload=payload)
-            js = r.json()
+            if r.status_code == 200:
+                js = r.json()
+                break
         except Exception:
             js = None
             time.sleep(1) # backoff a little, be polite 
-            continue
-        break
 
     return js
 
@@ -478,17 +512,18 @@ def fetch_reviews(by, criteria, start = MA_START):
     # Set how many records to return
     payload = MA_PAYLOAD
     payload['iDisplayStart'] = start
+    payload['iDisplayLength'] = 200
     
     # Try three times before giving up
     for _ in range(RETRIES):
         try:
             r = fetch_url(url, payload=payload)
-            js = r.json()
+            if r.status_code == 200:
+                js = r.json()
+                break
         except Exception:
             js = None
             time.sleep(1) # backoff a little, be polite 
-            continue
-        break
 
     return js
 
@@ -531,7 +566,8 @@ class MAQ(object):
     def query(self, qtype, by, \
             letters = MA_REVIEW_LETTERS, ratings = MA_REVIEW_RATINGS, \
             dates = MA_REVIEW_DATES, countries = MA_BAND_COUNTRY_CODES, \
-            genres = MA_BAND_GENRES, records = -1):
+            genres = MA_BAND_GENRES, logos = False, logos_dir = None, \
+            batch_start = 1, records = -1):
         """ Query MA """
 
         logger.info("Query %s by %s"% (qtype, by))
@@ -552,8 +588,10 @@ class MAQ(object):
         trs = 0
         for c in criteria:
             if qtype == 'reviews':
+                batchsize = MA_REVIEW_BATCHSIZE
                 js = fetch_reviews(by, criteria = c)
             else:
+                batchsize = MA_BAND_BATCHSIZE
                 js = fetch_bands(by, criteria = c)
             if js:
                 itrs = int(js['iTotalRecords'])
@@ -563,33 +601,33 @@ class MAQ(object):
                 logger.error("Failed to fetch %s for criteria %s..." % (qtype, c))
 
         # If asked to fetch only N number of records, honor it.
-        if records != -1: 
-            itrs = min(records, itrs)
         logger.info("Found a total of %5d records for all %s criteria to retrieve..." % (itrs, by))
+        if records != -1:
+            trs = min(trs, records)
+        if self.verbose:
+            self.progress_bar(trs)
+        nrecords = 0
 
         for c in criteria:
-            if itrs > 0:
-                logger.info("Processing reviews with the %s criteria %s..." % (by, c))
+            if itrs > 0 and nrecords != records:
+                logger.info("Processing %s with the %s criteria %s..." % (qtype, by, c))
                 js = fetch_reviews(by, criteria = c)
-                trs = min(int(js['iTotalRecords']), itrs)
-                if self.verbose:
-                    self.progress_bar(trs)
-                batches = trs//MA_BATCHSIZE
-                batches = batches + 1 if trs % MA_BATCHSIZE != 0 else batches
+                itrs = int(js['iTotalRecords'])
+                batches = itrs//batchsize
+                batches = batches + 1 if itrs % batchsize != 0 else batches
                 logger.info("Retrieving %d total records (batches = %d, batchsize = %d)..." % \
-                        (trs, batches, MA_BATCHSIZE))
-                nrecords = 0
-                for b in range(batches):
+                        (trs, batches, batchsize))
+                for b in range(batch_start-1, batches):
                     entries = []
                     if trs > 0:
-                        logger.info("Fetching batch %d of %d..." % (b, batches))
+                        logger.info("Fetching batch %d of %d..." % (b+1, batches))
                         if qtype == 'reviews':
-                            js = fetch_reviews(by, criteria = c, start = b * MA_BATCHSIZE)
+                            js = fetch_reviews(by, criteria = c, start = b * batchsize)
                         else:
-                            js = fetch_bands(by, criteria = c, start = b * MA_BATCHSIZE)
+                            js = fetch_bands(by, criteria = c, start = b * batchsize)
                         if js:
                             aaData = js['aaData']
-                            logger.info("Batch %d has %d records..." % (b, len(aaData)))
+                            logger.info("Batch %d has %d records..." % (b+1, len(aaData)))
                             for aa in aaData:
                                 if qtype == 'reviews':
                                     # Each review entry ('aa') consists of a:
@@ -632,11 +670,10 @@ class MAQ(object):
                                 nrecords += 1
                                 if self.verbose:
                                     self.bar.update(nrecords)
-                                if nrecords == trs:
+                                if nrecords == records:
                                     break
                         else:
                             logger.warn("Failed to get json for batch %d..." % b)
-
                     # Write out our batch group now
                     itrs -= trs
                     fields = MABand.to_fields()
@@ -652,7 +689,11 @@ class MAQ(object):
                                 raise
                         else:
                             click.echo(self.csvdelimiter.join(entry.to_list()))
+                        if qtype == 'bands' and logos:
+                            entry.save_logo(logo_dir = logos_dir)
                     logger.info("Processed %d records..." % len(entries))
+                    if nrecords == records:
+                        break
                 if self.verbose:
                     self.bar.finish()
         return 0
@@ -665,6 +706,14 @@ def setup_logging(verbose = False):
      level = logging.INFO if verbose else logging.ERROR
      logging.basicConfig(level = level, format = "%(asctime)s %(levelname)s: %(message)s")
      logger = logging.getLogger("maq")
+
+def validate_batch(ctx, param, value):
+    """ Make sure batch number is positive """
+
+    if value <= 0:
+        raise click.BadParameter('--batch must be positive')
+
+    return value
 
 @click.group()
 @click.option('--csvfile', '-c', type = click.File('w', encoding = 'utf-8'), default = None, help = 'CSV format')
@@ -696,12 +745,13 @@ def cli(ctx, csvfile, delimiter, header, quoting, retries, throttle, verbose):
 
 @cli.command()
 @click.option('--by', '-b', type = click.Choice(['alpha', 'date', 'rating']), default = 'alpha', help = 'Query by')
+@click.option('--batch', type = click.INT, default = 1, callback=validate_batch, help = 'Batch number to start from')
 @click.option('--date', '-d', type = click.STRING, default = None, help = 'Year-Date [YYYY-MM]')
 @click.option('--letter', '-l', type = click.STRING, default = None, help = 'First letter of band name')
 @click.option('--number', '-n', type = click.INT, default = -1, help = 'Number of records to return')
 @click.option('--rating', '-r', type = click.Choice(map(str, list(range(0, 101, 5)))), default = None, help = 'Review rating')
 @click.pass_obj
-def reviews(maq, by, date, letter, number, rating):
+def reviews(maq, by, batch, date, letter, number, rating):
     """ Query reviews """
 
     # Query every letter by default
@@ -712,17 +762,21 @@ def reviews(maq, by, date, letter, number, rating):
     else:
         date = MA_REVIEW_DATES if not date else [date]
 
-    return maq.query('reviews', by, letters = letter, ratings = rating, dates = date, records = number)
+    return maq.query('reviews', by, letters = letter, ratings = rating, \
+            dates = date, batch_start = batch, records = number)
 
 @cli.command()
 @click.option('--by', '-b', type = click.Choice(['alpha', 'country', 'genre']), default = 'alpha', help = 'Query by')
+@click.option('--batch', type = click.INT, default = 1, callback=validate_batch, help = 'Batch number to start from')
 @click.option('--country', '-c', type = click.Choice(MA_BAND_COUNTRY_CODES.keys()), default = None, help = 'Band country code')
 @click.option('--genre', '-g', type = click.Choice(MA_BAND_GENRES), default = None, help = 'Band genre')
 @click.option('--letter', '-l', type = click.STRING, default = None, help = 'First letter of band name')
+@click.option('--logos', flag_value = True, help = 'Fetch band logos')
+@click.option('--logosdir', type = click.Path(exists = True), default = None, help = 'Path to save logos')
 @click.option('--listcountries', flag_value = True, help = 'List country code -> country')
 @click.option('--number', '-n', type = click.INT, default = -1, help = 'Number of records to return')
 @click.pass_obj
-def bands(maq, by, country, genre, letter, listcountries, number):
+def bands(maq, by, batch, country, genre, letter, logos, logosdir, listcountries, number):
     """ Query bands """
 
     if listcountries:
@@ -738,7 +792,9 @@ def bands(maq, by, country, genre, letter, listcountries, number):
     else:
         genre = MA_BAND_GENRES if not genre else [genre]
 
-    return maq.query('bands', by, letters = letter, countries = country, genres = genre, records = number)
+    return maq.query('bands', by, letters = letter, countries = country, \
+            genres = genre, logos = logos, logos_dir = logosdir, \
+            batch_start = batch, records = number)
 
 # Main main MAIN
 if __name__ == '__main__':
