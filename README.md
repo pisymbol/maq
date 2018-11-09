@@ -1,6 +1,6 @@
 # Metal-Archives Query (maq)
 
-A command line tool to query [The Metal-Archives](http://www.metal-archives.com) and dump reviews and band information in CSV format.
+A command line tool to query [The Metal-Archives](http://www.metal-archives.com) and dump reviews and band information (including their logos) in CSV format for offline use.
 
 [The Metal-Archives](http://www.metal-archives.com) does not have an official developer API to access its database directly. However, there is an internal JSON API that the site's Javascript code uses to display results which can be leveraged to achieve essentially the samething.
 
