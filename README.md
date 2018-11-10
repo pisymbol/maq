@@ -23,7 +23,7 @@ sudo cp maq /usr/local/bin
 ## Usage
 
 ```
-maq --help
+# maq --help
 Usage: maq [OPTIONS] COMMAND [ARGS]...
 
   Metal-Archives Query
@@ -36,7 +36,7 @@ Options:
                                   CSV quoting behavior
   -r, --retries INTEGER           Number of request retries
   -t, --throttle FLOAT            Throttle requests (seconds)
-  -v, --verbose                   Verbose mode
+  --quiet                         Quite mode
   --help                          Show this message and exit.
 
 Commands:
@@ -47,7 +47,7 @@ Commands:
 To query for band information:
 
 ```
-maq bands --help
+# maq bands --help
 Usage: maq bands [OPTIONS]
 
   Query bands
@@ -70,6 +70,7 @@ Options:
 To query for review information:
 
 ```
+# maq reviews --help
 Usage: maq reviews [OPTIONS]
 
   Query reviews
@@ -129,7 +130,7 @@ To dump all bands into a CSV file and their corresponding logos (one image per b
 maq --csvfile bands.csv bands --logos
 ```
 
-A progress bar is displayed as maq fetches query results from the website. Use the **-v** option to increase verbosity and to get a handle of how many results you are attempting to fetch in a single run.
+A progress bar is displayed as maq fetches query results from the website. Use the **--quiet** option to enable silent operation.
 
 Please note that records are written out in batches. Currently the batchsize is static since MA does not allow you to change it programmatically.
 
@@ -147,6 +148,8 @@ Please set your shell's locale as follows and then re-run maq:
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 ```
+
+maq writes entries in batches (batch size is fixed at 200 for reviews and 500 for bands). If for whatever reason a batch fails to process due to network timeouts or other unexpected interruptions, you can always start over at the batch number using the '--batch' option above.
 
 ## Authors
 
