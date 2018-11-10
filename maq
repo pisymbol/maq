@@ -281,6 +281,9 @@ THROTTLE = 0.5
 # Default number of retries for all fetch requests
 RETRIES = 3
 
+# Quiet mode enabled or not
+QUIET = False
+
 # This is a bit overkill but we will construct a simple OOM.
 # MA pages are backed by a URL. These pages in-turn represent
 # instances of bands which record albums that users review.
@@ -531,21 +534,19 @@ class MAQ(object):
     """ Command line interface """
 
     def __init__(self, csvfile = None, csvdelimiter = ',', header = True, \
-            quoting = csv.QUOTE_ALL, verbose = False):
+            quoting = csv.QUOTE_ALL):
 
         self.csvfile = csvfile
         self.csvdelimiter = csvdelimiter
         self.header = header
         self.csvwriter = None
         self.quoting = quoting
-        self.verbose = verbose
 
     def write_header(self, fields = None):
         """ Optionally write CSV header """
 
         # Walk through each review by letter
         if self.header:
-            logger.info("Header field names: %s" % ' '.join(fields))
             if self.csvfile:
                 self.csvwriter = csv.DictWriter(self.csvfile, delimiter = self.csvdelimiter, \
                         fieldnames = fields, quoting = self.quoting)
@@ -604,7 +605,7 @@ class MAQ(object):
         logger.info("Found a total of %5d records for all %s criteria to retrieve..." % (itrs, by))
         if records != -1:
             trs = min(trs, records)
-        if self.verbose:
+        if not QUIET:
             self.progress_bar(trs)
         nrecords = 0
 
@@ -668,7 +669,7 @@ class MAQ(object):
                                     else:
                                         logger.warn("Malformed band entry: %s..." % aa)
                                 nrecords += 1
-                                if self.verbose:
+                                if not QUIET:
                                     self.bar.update(nrecords)
                                 if nrecords == records:
                                     break
@@ -694,16 +695,17 @@ class MAQ(object):
                     logger.info("Processed %d records..." % len(entries))
                     if nrecords == records:
                         break
-                if self.verbose:
+                if not QUIET:
                     self.bar.finish()
         return 0
 
-def setup_logging(verbose = False):
+def setup_logging():
      """ Setup the global logger """
 
      global logger
+     global QUIET
 
-     level = logging.INFO if verbose else logging.ERROR
+     level = logging.ERROR if QUIET else logging.INFO
      logging.basicConfig(level = level, format = "%(asctime)s %(levelname)s: %(message)s")
      logger = logging.getLogger("maq")
 
@@ -722,15 +724,17 @@ def validate_batch(ctx, param, value):
 @click.option('--quoting', '-q', type = click.Choice(QUOTING_RULES.keys()), default = 'all', help= 'CSV quoting behavior')
 @click.option('--retries', '-r', type = click.INT, default = RETRIES, help = 'Number of request retries')
 @click.option('--throttle', '-t', type = click.FLOAT, default = THROTTLE, help = 'Throttle requests (seconds)')
-@click.option('--verbose', '-v', is_flag = True, default = False, help = 'Verbose mode')
+@click.option('--quiet', is_flag = True, default = QUIET, help = 'Quite mode')
 @click.pass_context
-def cli(ctx, csvfile, delimiter, header, quoting, retries, throttle, verbose):
+def cli(ctx, csvfile, delimiter, header, quoting, retries, throttle, quiet):
     """ Metal-Archives Query """
     global THROTTLE
     global RETRIES
+    global QUIET
 
     # Instastiate our logger for the our whole run.
-    setup_logging(verbose)
+    QUIET = quiet
+    setup_logging()
 
     # Set any globals
     THROTTLE = throttle
@@ -741,7 +745,7 @@ def cli(ctx, csvfile, delimiter, header, quoting, retries, throttle, verbose):
     # Build our command line application that will do
     # all the grunt work.
     ctx.obj = MAQ(csvfile = csvfile, csvdelimiter = delimiter, \
-            header = header, quoting = QUOTING_RULES[quoting], verbose = verbose)
+            header = header, quoting = QUOTING_RULES[quoting])
 
 @cli.command()
 @click.option('--by', '-b', type = click.Choice(['alpha', 'date', 'rating']), default = 'alpha', help = 'Query by')
