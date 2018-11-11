@@ -161,7 +161,7 @@ All review entries start with a band entry for that review (all the columns outl
 
 ## Logos
 
-If you specify '--logos' for a band query that band's logo image file will be saved as 'bid.<suffix>' (e.g. 1.jpg) so you can correlate the image file with the band using their band ID. Suffixes are either 'jpg', 'gif' or 'png'.
+If you specify '--logos' for a band query that band's logo image file will be saved as 'bid.\[jpg|gif|png\]' (e.g. 1.jpg) so you can correlate the image file with the band using their band ID.
 
 ## Troubleshooting
 
