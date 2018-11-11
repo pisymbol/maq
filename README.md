@@ -134,6 +134,35 @@ A progress bar is displayed as maq fetches query results from the website. Use t
 
 Please note that records are written out in batches. Currently the batchsize is static since MA does not allow you to change it programmatically.
 
+## CSV Format
+
+```
+Bands:
+  "bid"       - Band ID
+  "name"      - Band name
+  "origin"    - Country of origin
+  "location"  - Location
+  "status"    - Status (active, split-up, etc.)
+  "formedin"  - Formed in year
+  "genre"     - Genre list separated by '|' delimiter
+  "themes"    - Lyrical themes list separated by '|' delimiter
+  "label"     - Current label
+  
+Reviews:
+All review entries start with a band entry for that review (all the columns outlined above) in addition to:
+  "uid"       - User ID
+  "aid"       - Album ID
+  "album"     - Album name
+  "author"    - Review author
+  "review"    - Review content (UTF-8)
+  "rating"    - Rating (0-100%)
+  "date"      - Review date
+```
+
+## Logos
+
+If you specify '--logos' for a band query that band's logo image file will be saved as 'bid.<suffix>' (e.g. 1.jpg) so you can correlate the image file with the band using their band ID. Suffixes are either 'jpg', 'gif' or 'png'.
+
 ## Troubleshooting
 
 maq makes heavy use of the [click](http://click.palletsprojects.com/en/7.x/) which requires that your shell's locale be set to something sensible. If you execute maq and get the following error:
