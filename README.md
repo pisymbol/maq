@@ -165,7 +165,7 @@ If you specify '--logos' for a band query that band's logo image file will be sa
 
 ## Troubleshooting
 
-maq makes heavy use of the [click](http://click.palletsprojects.com/en/7.x/) which requires that your shell's locale be set to something sensible. If you execute maq and get the following error:
+maq makes heavy use of the [click](http://click.palletsprojects.com/en/7.x/) module which requires that your shell's locale be set to something sensible. If you execute maq and get the following error:
 
 ```
 RuntimeError: Click will abort further execution because Python 3 was configured to use ASCII as encoding for the environment.
@@ -178,7 +178,7 @@ export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 ```
 
-maq writes entries in batches (batch size is fixed at 200 for reviews and 500 for bands). If for whatever reason a batch fails to process due to network timeouts or other unexpected interruptions, you can always start over at the batch number using the '--batch' option above.
+maq writes entries in batches (batch size is fixed at 200 for reviews and 500 for bands). If for whatever reason a batch fails to process due to network timeouts or other unexpected interruptions, you can always start over from that batch number using the '--batch' option above.
 
 ## Authors
 
