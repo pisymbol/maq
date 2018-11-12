@@ -612,12 +612,15 @@ class MAQ(object):
         for c in criteria:
             if itrs > 0 and nrecords != records:
                 logger.info("Processing %s with the %s criteria %s..." % (qtype, by, c))
-                js = fetch_reviews(by, criteria = c)
+                if qtype == 'reviews':
+                    js = fetch_reviews(by, criteria = c)
+                else:
+                    js = fetch_bands(by, criteria = c)
                 itrs = int(js['iTotalRecords'])
                 batches = itrs//batchsize
                 batches = batches + 1 if itrs % batchsize != 0 else batches
                 logger.info("Retrieving %d total records (batches = %d, batchsize = %d)..." % \
-                        (trs, batches, batchsize))
+                        (itrs, batches, batchsize))
                 for b in range(batch_start-1, batches):
                     entries = []
                     if trs > 0:
