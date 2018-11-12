@@ -586,7 +586,7 @@ class MAQ(object):
 
         # First find the total number of records we plan to fetch
         # We need to do this in two passes unfortunately.
-        trs = 0
+        itrs = trs = 0
         for c in criteria:
             if qtype == 'reviews':
                 batchsize = MA_REVIEW_BATCHSIZE
