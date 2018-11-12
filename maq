@@ -492,6 +492,7 @@ def fetch_bands(by, criteria, start = MA_START):
     payload['iDisplayLength'] = 500
 
     # Try three times before giving up
+    js = None
     for _ in range(RETRIES):
         try:
             r = fetch_url(url, payload=payload)
@@ -499,7 +500,6 @@ def fetch_bands(by, criteria, start = MA_START):
                 js = r.json()
                 break
         except Exception:
-            js = None
             time.sleep(1) # backoff a little, be polite 
 
     return js
