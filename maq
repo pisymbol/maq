@@ -439,7 +439,11 @@ class MAReview(MAPage):
     def to_list(self):
         """ Return fields as list """
 
-        return self.band.to_list() + [self.uid, self.aid, self.album, self.author, self.review, self.rating, self.date]
+        rlist = [self.uid, self.aid, self.album, self.author, self.review, self.rating, self.date]
+        if self.band != "":
+            return self.band.to_list() + rlist
+        else:
+            return rlist
 
     def to_dict(self):
         """ Return fields as dict """
@@ -453,7 +457,9 @@ class MAReview(MAPage):
                 'rating': self.rating,
                 'date': self.date,
         }
-        d.update(self.band.to_dict())
+
+        if self.band != "":
+            d.update(self.band.to_dict())
 
         return d
 
@@ -567,8 +573,8 @@ class MAQ(object):
     def query(self, qtype, by, \
             letters = MA_REVIEW_LETTERS, ratings = MA_REVIEW_RATINGS, \
             dates = MA_REVIEW_DATES, countries = MA_BAND_COUNTRY_CODES, \
-            genres = MA_BAND_GENRES, logos = False, logos_dir = None, \
-            batch_start = 1, records = -1):
+            genres = MA_BAND_GENRES, bandinfo = False, \
+            logos = False, logos_dir = None, batch_start = 1, records = -1):
         """ Query MA """
 
         logger.info("Query %s by %s"% (qtype, by))
@@ -656,8 +662,9 @@ class MAQ(object):
                                     mar = MAReview(ahref.find('a').get('href'))
                                     mar.parse()
                                     ahref = BeautifulSoup(aa[2], "lxml")
-                                    mar.band = MABand(ahref.find('a').get('href'))
-                                    mar.band.parse()
+                                    if bandinfo:
+                                        mar.band = MABand(ahref.find('a').get('href'))
+                                        mar.band.parse()
                                     ahref = BeautifulSoup(aa[3], "lxml")
                                     mar.album = ahref.text
                                     mar.rating = aa[4]
@@ -690,7 +697,11 @@ class MAQ(object):
                     # Write out our batch group now
                     fields = MABand.to_fields()
                     if qtype == 'reviews':
-                        fields += MAReview.to_fields()
+                        fields = MAReview.to_fields()
+                        if bandinfo:
+                            fields = MABand.to_fields() + fields
+                    else:
+                        fields = MABand.to_fields()
                     self.write_header(fields = fields)
                     for entry in entries:
                         if self.csvfile:
@@ -761,12 +772,13 @@ def cli(ctx, csvfile, delimiter, header, quoting, retries, throttle, quiet):
 @cli.command()
 @click.option('--by', '-b', type = click.Choice(['alpha', 'date', 'rating']), default = 'alpha', help = 'Query by')
 @click.option('--batch', type = click.INT, default = 1, callback=validate_batch, help = 'Batch number to start from')
+@click.option('--bandinfo', flag_value = True, default = False, help = 'Include band info with each review')
 @click.option('--date', '-d', type = click.STRING, default = None, help = 'Year-Date [YYYY-MM]')
 @click.option('--letter', '-l', type = click.STRING, default = None, help = 'First letter of band name')
 @click.option('--number', '-n', type = click.INT, default = -1, help = 'Number of records to return')
 @click.option('--rating', '-r', type = click.Choice(map(str, list(range(0, 101, 5)))), default = None, help = 'Review rating')
 @click.pass_obj
-def reviews(maq, by, batch, date, letter, number, rating):
+def reviews(maq, by, batch, bandinfo, date, letter, number, rating):
     """ Query reviews """
 
     # Query every letter by default
@@ -778,7 +790,7 @@ def reviews(maq, by, batch, date, letter, number, rating):
         date = MA_REVIEW_DATES if not date else [date]
 
     return maq.query('reviews', by, letters = letter, ratings = rating, \
-            dates = date, batch_start = batch, records = number)
+            dates = date, batch_start = batch, bandinfo = bandinfo, records = number)
 
 @cli.command()
 @click.option('--by', '-b', type = click.Choice(['alpha', 'country', 'genre']), default = 'alpha', help = 'Query by')
