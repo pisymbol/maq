@@ -78,6 +78,7 @@ Usage: maq reviews [OPTIONS]
 Options:
   -b, --by [alpha|date|rating]    Query by
   --batch INTEGER                 Batch number to start from
+  --bandinfo                      Include band info with each review
   -d, --date TEXT                 Year-Date [YYYY-MM]
   -l, --letter TEXT               First letter of band name
   -n, --number INTEGER            Number of records to return
@@ -112,10 +113,10 @@ To query reviews of artists starting with the letter 'M' and return the first 10
 maq reviews --by alpha --letter M -n10
 ```
 
-To query reviews in the range of 45-50% and return the first 10 results of batch 5:
+To query reviews in the range of 45-50% and return the first 10 results of batch 5 (include band info):
 
 ```
-maq reviews --by rating --rating 50 -n10 --batch 5
+maq reviews --by rating --rating 50 -n10 --batch 5 --bandinfo
 ```
 
 To dump all reviews into a CSV file:
