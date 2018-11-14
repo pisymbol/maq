@@ -138,7 +138,7 @@ Please note that records are written out in batches. Currently the batchsize is 
 ## CSV Format
 
 ```
-Bands:
+Band:
   "bid"       - Band ID
   "name"      - Band name
   "origin"    - Country of origin
@@ -149,8 +149,7 @@ Bands:
   "themes"    - Lyrical themes list separated by '|' delimiter
   "label"     - Current label
   
-Reviews:
-All review entries start with a band entry for that review (all the columns outlined above) in addition to:
+Review:
   "uid"       - User ID
   "aid"       - Album ID
   "album"     - Album name
@@ -159,6 +158,8 @@ All review entries start with a band entry for that review (all the columns outl
   "rating"    - Rating (0-100%)
   "date"      - Review date
 ```
+
+The use of the '--bandinfo' command line option for review queries will prepend the "Band" fields above with the "Review" ones to form one complete CSV entry.
 
 ## Logos
 
